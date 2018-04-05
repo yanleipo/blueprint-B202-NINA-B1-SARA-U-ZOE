@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>u-blox B202 Demo</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <style>
+      #map {
+        height: 100%;
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      var map;
+      var pos = {lat: 47.2850634, lng: 8.5656655}; //u-blox headquarter, Thalwil
+      var markersArr = [];
+      var infoWindowArr = [];
+      var connectedDevices = [];
+      var deviceIndex;
+       
+      function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: pos,
+          zoom: 12
+        });
+        infoWindow = new google.maps.InfoWindow;
+      }
+
+      function addMarker(index) {
+        var markerPos = pos;
+        if (index > 0) {
+          markerPos = {lat: pos.lat + Math.random()*0.01, lng: pos.lng + Math.random()*0.01};
+        }
+        markersArr[index] = new google.maps.Marker({
+          position: {
+            lat: markerPos.lat,
+            lng: markerPos.lng
+          },
+          map: map
+        });
+        infoWindowArr[index] = new google.maps.InfoWindow;
+        infoWindowArr[index].setPosition(markerPos);
+        markersArr[index].addListener('click', function() {
+          infoWindowArr[index].open(map, markersArr[index]);
+        });        
+      }       
+  
+      function updateInfoWindow(index) {
+        var boxText = "<h2>" + connectedDevices[index].name + "</h2>";
+        var data = connectedDevices[index].scanResult.split(';');
+        var j = 0;
+        for (field of data) {
+          f = field.split(',');
+          if (f[0] !== undefined && f[1] !== undefined) {
+            boxText += f[0] + ", " + f[1] + " dBm" + "<br>";
+            j++;
+          }
+        }
+        infoWindowArr[index].setContent(boxText);
+      }   
+      
+      var webSocket = new WebSocket("wss://odin-w2-dice-demo.eu-gb.mybluemix.net/ws/post");
+      
+      webSocket.onopen = function () {
+        setInterval(function () {
+          if (webSocket.bufferedAmount == 0)
+            webSocket.send("Keep alive from client");
+        }, 30000);
+      };
+      
+      webSocket.onmessage = function (event) {
+        var receivedObject = JSON.parse(event.data);
+        //Check if received object is from an already connected devices
+        addDevice = true;
+        for (object of connectedDevices) {
+          if (object.name == receivedObject.name) {
+            i = connectedDevices.indexOf(object);
+            connectedDevices[i].scanResult = receivedObject.scanResult;
+            addDevice = false
+            deviceIndex = i;
+            break;
+          }
+        }
+        if (addDevice) {
+          //New device, add to array
+          connectedDevices.push(receivedObject)
+          deviceIndex = connectedDevices.length - 1;
+          addMarker(deviceIndex);
+          updateInfoWindow(deviceIndex);
+        } else {
+          updateInfoWindow(deviceIndex);
+        }
+      }           
+      
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap">
+    </script>
+  </body>
+</html>
