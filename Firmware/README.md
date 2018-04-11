@@ -21,3 +21,8 @@ Precompiled firmware is provided and can be used with B202 hardware. The .hex fi
 * Copy the folder ```src``` to the ```/example``` folder of the SDK
 
 * Open the SEGGER Embedded Studio project file located in ```src\ninab1\s132\ses\```
+
+## Webpage
+
+To use the Google Maps JavaScript API, you must register your app project on the Google API Console and get a Google API key which you can add to your app, [see Google Maps API documentation](https://developers.google.com/maps/documentation/javascript/get-api-key).   
+Substitute YOUR_API_KEY in the webpage code with the API key you got from the previous step.
