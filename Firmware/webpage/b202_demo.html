@@ -55,12 +55,10 @@
       function updateInfoWindow(index) {
         var boxText = "<h2>" + connectedDevices[index].name + "</h2>";
         var data = connectedDevices[index].scanResult.split(';');
-        var j = 0;
         for (field of data) {
           f = field.split(',');
           if (f[0] !== undefined && f[1] !== undefined) {
             boxText += f[0] + ", " + f[1] + " dBm" + "<br>";
-            j++;
           }
         }
         infoWindowArr[index].setContent(boxText);
