@@ -1,4 +1,4 @@
-//u-blox B202 http post demo application version 1.0
+//u-blox B202 http post demo application version 1.1
 
 #include <stdint.h>
 #include <stdio.h>
@@ -48,7 +48,7 @@ typedef struct
 } scan_result_t;
 
 scan_result_t scan_result_list[30];
-uint8_t scan_result_index;
+uint8_t number_of_scan_results;
 
 static ble_gap_scan_params_t const m_scan_params =
 {
@@ -338,7 +338,7 @@ static void scan_start(void)
     (void) sd_ble_gap_scan_stop();
 
     memset(scan_result_list, 0, sizeof(scan_result_list));
-    scan_result_index = 0;
+    number_of_scan_results = 0;
 
     err_code = sd_ble_gap_scan_start(&m_scan_params);
     APP_ERROR_CHECK(err_code);
@@ -361,13 +361,13 @@ static void on_adv_report(const ble_evt_t * const p_ble_evt)
             scan_result_list[i].rssi = rssi_dbm;
             break;
         }
-        if (i == scan_result_index)
+        if (i == number_of_scan_results)
         {
             //Remote device not in list, add device
             strncpy(scan_result_list[i].addr, addr, 6);
             scan_result_list[i].rssi = rssi_dbm;
 
-            scan_result_index++;
+            number_of_scan_results++;
             break;
         }
     }
@@ -377,10 +377,10 @@ static void on_adv_report(const ble_evt_t * const p_ble_evt)
 static void send_scan_result()
 {
     uint8_t temp_str[23];
-    uint8_t* scan_result_str  = (uint8_t*)malloc(MAX_NUMBER_OF_SCAN_RESULTS * sizeof(temp_str));
-    memset(scan_result_str, 0, MAX_NUMBER_OF_SCAN_RESULTS * sizeof(temp_str));
+    uint8_t* scan_result_str  = (uint8_t*)malloc(number_of_scan_results * sizeof(temp_str));
+    memset(scan_result_str, 0, number_of_scan_results * sizeof(temp_str));
 
-    for (uint8_t k=0; k < MAX_NUMBER_OF_SCAN_RESULTS; k++)
+    for (uint8_t k=0; k < number_of_scan_results; k++)
     {
         sprintf(temp_str, "%02X:%02X:%02X:%02X:%02X:%02X,%03d;",
             scan_result_list[k].addr[5],
@@ -488,8 +488,6 @@ int main(void)
 {
     uint32_t err_code;
     bool status1, status2, status3;
-
-    nrf_delay_ms(10000);
 
     led_init();
 
