@@ -1,4 +1,4 @@
-//u-blox B202 http post demo application version 1.1
+//u-blox B202 http post demo application
 
 #include <stdint.h>
 #include <stdio.h>
@@ -490,6 +490,12 @@ int main(void)
     bool status1, status2, status3;
 
     led_init();
+    led(GREEN_BLUE);
+
+    //Wait for SARA-U201 module to be ready to operate, typical
+    //6 seconds see SARA-U2 series System Integration Manual.
+    //Delay set to 10 seconds.
+    nrf_delay_ms(10000);
 
     const app_uart_comm_params_t comm_params =
       {
