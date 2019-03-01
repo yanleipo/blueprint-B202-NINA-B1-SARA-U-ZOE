@@ -4,6 +4,8 @@
 
 Track B202 location and push location information to thingsboard server. Location and temperature information can be viewed at http://ec2-18-224-182-187.us-east-2.compute.amazonaws.com:8080/dashboard/6f068ff0-3b34-11e9-b693-1dfede625bdd?publicId=5a9a5500-3b35-11e9-b693-1dfede625bdd . 
 
+Blue LED will flash every 3 seconds after B202 register to the network and start pushing data to the cloud. 
+
 For new tracker to be added, a new B202 device need to be created in thingsboard server. The IMEI information of the SARA-U2 need to be entered in the as device credentials. You may contact leipo.yan@u-blox.com to add your device.
 
 Default APN is "internet". It's possible to change the APN before SARA-U2 tries to register to the network (30 seconds within bootup). This can be done using nRF Connect software. Scan and connect to device B202-xxxx. In the Nordic UART service, write text "apn=e-ideas" (without quiote) to Nordic UART RX to change the APN to "e-ideas". 
@@ -32,4 +34,6 @@ Flash s132_nrf52_6.1.0_softdevice.hex and b202_s132.hex to B202.
 
 * Open the SEGGER Embedded Studio project file located in ```src\ninab1\s132\ses\```
 
+## Known issues
+There is a problem reading temperature from LSM6DSL sensor. It's always 0. Value of WHO_AM_I (0x0F) register is 0x69 instead of 0x6A.
 
