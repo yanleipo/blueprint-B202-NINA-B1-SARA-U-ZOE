@@ -43,6 +43,8 @@
  *
  */
 
+#include <stdio.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
 #include "nordic_common.h"
@@ -83,6 +85,7 @@
 #include "gnss.h"
 #include "cellular.h"
 #include "sensor.h"
+#include "main.h"
 
 #define DEVICE_NAME_PREFIX                  "B202-"                            /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME                   "u-blox"                   /**< Manufacturer. Will be passed to Device Information Service. */
@@ -126,7 +129,8 @@ NRF_BLE_QWR_DEF(m_qwr);                                             /**< Context
 BLE_ADVERTISING_DEF(m_advertising);                                 /**< Advertising module instance. */
 APP_TIMER_DEF(m_loc_and_nav_timer_id);                              /**< Location service timer. */
 
-static bool m_dbg_UART_passthrough = false;
+bool m_dbg_UART_passthrough = false;
+static bool m_dbg_log = false;
 
 static uint16_t m_conn_handle         = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 static uint16_t   m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;            /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -323,23 +327,12 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
 
     if (p_evt->type == BLE_NUS_EVT_RX_DATA)
     {
+        bool dbg_command = false;
         uint32_t err_code;
 
         NRF_LOG_DEBUG("Received data from BLE NUS. Writing data on UART.");
         NRF_LOG_HEXDUMP_DEBUG(p_evt->params.rx_data.p_data, p_evt->params.rx_data.length);
 
-        for (uint32_t i = 0; i < p_evt->params.rx_data.length; i++)
-        {
-            do
-            {
-                err_code = app_uart_put(p_evt->params.rx_data.p_data[i]);
-                if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY))
-                {
-                    NRF_LOG_ERROR("Failed receiving NUS message. Error 0x%x. ", err_code);
-                    APP_ERROR_CHECK(err_code);
-                }
-            } while (err_code == NRF_ERROR_BUSY);
-        }
         if( p_evt->params.rx_data.length >= 9)
         {
             if( (p_evt->params.rx_data.p_data[0]=='d') &&\
@@ -361,6 +354,7 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
                     m_dbg_UART_passthrough = false;
                     NRF_LOG_INFO("Disabling UART passthrough.");
                 }
+                dbg_command = true;
             }
         }
         
@@ -378,12 +372,65 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
                 NRF_LOG_INFO("APN set to %s.", apn);
                 cellular_set_apn(apn);
                 free(apn);
+                dbg_command = true;
             }
         }
 
-        if (p_evt->params.rx_data.p_data[p_evt->params.rx_data.length - 1] == '\r')
+        if( p_evt->params.rx_data.length >= 9)
         {
-            while (app_uart_put('\n') == NRF_ERROR_BUSY);
+            if( (p_evt->params.rx_data.p_data[0]=='d') &&\
+                (p_evt->params.rx_data.p_data[1]=='b') &&\
+                (p_evt->params.rx_data.p_data[2]=='g') &&\
+                (p_evt->params.rx_data.p_data[3]=='-') &&\
+                (p_evt->params.rx_data.p_data[4]=='l') &&\
+                (p_evt->params.rx_data.p_data[5]=='o') &&\
+                (p_evt->params.rx_data.p_data[6]=='g') &&\
+                (p_evt->params.rx_data.p_data[7]=='='))
+            {
+                if(p_evt->params.rx_data.p_data[8]=='1')
+                {
+                    m_dbg_log = true;
+                    NRF_LOG_INFO("debugging log enabled.");
+                }
+                if(p_evt->params.rx_data.p_data[8]=='0')
+                {
+                    m_dbg_log = false;
+                    NRF_LOG_INFO("debugging log disabled.");
+                }
+                dbg_command = true;
+            }
+        }
+
+        if(!dbg_command)
+        {
+            for (uint32_t i = 0; i < p_evt->params.rx_data.length; i++)
+            {
+                do
+                {
+                    err_code = app_uart_put(p_evt->params.rx_data.p_data[i]);
+                    if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY))
+                    {
+                        NRF_LOG_ERROR("Failed receiving NUS message. Error 0x%x. ", err_code);
+                        APP_ERROR_CHECK(err_code);
+                    }
+                } while (err_code == NRF_ERROR_BUSY);
+            }
+
+            if (p_evt->params.rx_data.p_data[p_evt->params.rx_data.length - 1] == '\r')
+            {
+                while (app_uart_put('\n') == NRF_ERROR_BUSY);
+            }
+            else
+            {
+                NRF_LOG_INFO("data: 0x%x 0x%x", p_evt->params.rx_data.p_data[0], p_evt->params.rx_data.p_data[1]);
+                if( (p_evt->params.rx_data.p_data[0] == 'a' || p_evt->params.rx_data.p_data[0] == 'A') && \
+                    (p_evt->params.rx_data.p_data[1] == 't' || p_evt->params.rx_data.p_data[1] == 'T'))
+                {
+                    NRF_LOG_INFO("Assuming AT command. Appending \r\n at the end.");
+                    while (app_uart_put('\r') == NRF_ERROR_BUSY);
+                    while (app_uart_put('\n') == NRF_ERROR_BUSY);
+                }
+            }
         }
     }
 
@@ -1026,6 +1073,35 @@ static void idle_state_handle(void)
     if (NRF_LOG_PROCESS() == false)
     {
         nrf_pwr_mgmt_run();
+    }
+}
+
+void B202_NUS_LOG(char *format, ...)
+{
+    if (m_dbg_log && m_conn_handle != BLE_CONN_HANDLE_INVALID)
+    {
+        uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
+        uint32_t err_code;
+        uint16_t length = 0;
+        va_list args;
+
+        memset(data_array, 0, BLE_NUS_MAX_DATA_LEN*sizeof(uint8_t));
+
+        va_start(args, format);
+        vsprintf(data_array,format, args);
+        va_end(args);
+
+        length = strlen(data_array);
+        do
+        {
+            err_code = ble_nus_data_send(&m_nus, data_array, &length, m_conn_handle);
+            if ((err_code != NRF_ERROR_INVALID_STATE) &&
+                (err_code != NRF_ERROR_RESOURCES) &&
+                (err_code != NRF_ERROR_NOT_FOUND))
+            {
+                APP_ERROR_CHECK(err_code);
+            }
+        } while (err_code == NRF_ERROR_RESOURCES);
     }
 }
 

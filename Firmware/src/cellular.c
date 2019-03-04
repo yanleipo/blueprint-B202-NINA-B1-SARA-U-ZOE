@@ -22,6 +22,9 @@
 #include "app_timer.h"
 #include "ble_date_time.h"
 #include "sensor.h"
+#include "main.h"
+
+extern bool m_dbg_UART_passthrough;                  /**< UART passthrough flag to overwrite LED status */
 
 #define UART_TX_BUF_SIZE 256                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE 256                         /**< UART RX buffer size. */
@@ -163,7 +166,7 @@ bool get_imei()
         imei[i] = (uint8_t)in[i];
     }
 
-    NRF_LOG_INFO("IMEI: %s", imei);
+    B202_LOG_INFO("IMEI: %s", imei);
     return true;
 }
 
@@ -332,12 +335,12 @@ bool cellular_set_apn(uint8_t* apn)
 {
     if(strlen(apn) > MAX_APN_SIZE)
     {
-        NRF_LOG_ERROR("APN size(%d) is bigger than maximum size(%d)\n", strlen(apn), MAX_APN_SIZE);
+        B202_LOG_ERROR("APN size(%d) is bigger than maximum size(%d)\n", strlen(apn), MAX_APN_SIZE);
         return false;
     }
     memset(m_apn, 0, MAX_APN_SIZE);
     memcpy(m_apn, apn, strlen(apn));
-    NRF_LOG_INFO("APN set to: %s(%d)\n", m_apn, strlen(m_apn));
+    B202_LOG_INFO("APN set to: %s(%d)\n", m_apn, strlen(m_apn));
     return true;
 }
 
@@ -345,28 +348,34 @@ static void cel_timeout_handler(void * p_context)
 {   
     m_step_ready = true;
 
-    /* Light LED to show CEL status */
-    m_led_show = !m_led_show;
-    if(m_led_show)
+    if(m_dbg_UART_passthrough)
     {
-        switch(m_cel_status)
-        {
-            case CEL_NOT_READY:
-                led(OFF);
-                break;
-            case CEL_READY_TO_REGISTER:
-                led(GREEN);
-                break;
-            case CEL_REGISTERED:
-                led(GREEN_BLUE);
-                break;
-            case CEL_CONNECTED:
-                led(BLUE);
-                break;
-        }
+        led(BLUE);
     } else
     {
-        led(OFF);
+        /* Light LED to show CEL status */
+        m_led_show = !m_led_show;
+        if(m_led_show)
+        {
+            switch(m_cel_status)
+            {
+                case CEL_NOT_READY:
+                    led(GREEN_BLUE);
+                    break;
+                case CEL_READY_TO_REGISTER:
+                    led(GREEN);
+                    break;
+                case CEL_REGISTERED:
+                    led(GREEN_BLUE);
+                    break;
+                case CEL_CONNECTED:
+                    led(BLUE);
+                    break;
+            }
+        } else
+        {
+            led(OFF);
+        }
     }
 }
 
@@ -418,7 +427,7 @@ void cellular_step(void)
     {
         bool status = false;
 
-        NRF_LOG_INFO("cellular status: %d", m_cel_status);
+        B202_LOG_INFO("cellular status: %d", m_cel_status);
 
         m_step_ready = false;
 
@@ -430,7 +439,7 @@ void cellular_step(void)
                 //6 seconds see SARA-U2 series System Integration Manual.
                 //Delay set to 10 seconds.
                 m_cel_timer_count++;
-                NRF_LOG_INFO("cellular timer counter: %d", m_cel_timer_count);
+                B202_LOG_INFO("cellular timer counter: %d", m_cel_timer_count);
                 if(m_cel_timer_count>=CEL_COUNTER_MAX)
                 {
                     //Disable flow control
@@ -440,7 +449,7 @@ void cellular_step(void)
 
                     /* Server access token is 20bytes. It's set as IMEI of the CEL with 0 padding at the end */
                     memcpy(m_server_access_token, imei, sizeof(imei));
-                    NRF_LOG_INFO("Server access token set to: %s.", m_server_access_token);
+                    B202_LOG_INFO("Server access token set to: %s.", m_server_access_token);
                 }
                 break;
             case CEL_READY_TO_REGISTER:
@@ -448,10 +457,10 @@ void cellular_step(void)
                 if(status)
                 {
                     m_cel_status = CEL_REGISTERED;
-                    NRF_LOG_DEBUG("Registered to  and activate ps_data\n", m_apn, sizeof(m_apn));
+                    B202_LOG_DEBUG("Registered to  and activate ps_data\n", m_apn, sizeof(m_apn));
                 } else
                 {
-                    NRF_LOG_ERROR("Failed to config apn %s(%d) and activate ps_data\n", m_apn, sizeof(m_apn));
+                    B202_LOG_ERROR("Failed to config apn %s(%d) and activate ps_data\n", m_apn, sizeof(m_apn));
                 }
                 break;
             case CEL_REGISTERED:
@@ -459,10 +468,10 @@ void cellular_step(void)
                 if(status)
                 {
                     m_cel_status = CEL_CONNECTED;
-                    NRF_LOG_DEBUG("Connected to server\n");
+                    B202_LOG_DEBUG("Connected to server\n");
                 } else
                 {
-                    NRF_LOG_ERROR("Failed to set_http_server\n");
+                    B202_LOG_ERROR("Failed to set_http_server\n");
                 }
                 break;
             case CEL_CONNECTED:
@@ -477,12 +486,12 @@ void cellular_step(void)
                     status = gnss_get_lns(&lat, &log, &utc_time);
                     if(status)
                     {
-                        NRF_LOG_DEBUG("Tracker location: (%d, %d)\n", lat, log);
+                        B202_LOG_DEBUG("Tracker location: (%d, %d)\n", lat, log);
                         fix = 1;
                     }
                     else
                     {
-                        NRF_LOG_DEBUG("Unable to get location. Use default location\n");
+                        B202_LOG_DEBUG("Unable to get location. Use default location\n");
                         fix = 0;
                         lat = DEFAULT_LAT;
                         log = DEFAULT_LONG;
@@ -495,7 +504,7 @@ void cellular_step(void)
                  }   
                 break;
             default:
-                NRF_LOG_DEBUG("Unhandled celular status: %d\n", m_cel_status);
+                B202_LOG_DEBUG("Unhandled celular status: %d\n", m_cel_status);
                 break;
        }
    }
