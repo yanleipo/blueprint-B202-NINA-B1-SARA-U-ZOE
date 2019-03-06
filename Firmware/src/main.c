@@ -68,6 +68,10 @@
 
 #define DEVICE_NAME_PREFIX                  "B202-"                            /**< Name of device. Will be included in the advertising data. */
 #define MANUFACTURER_NAME                   "u-blox"                   /**< Manufacturer. Will be passed to Device Information Service. */
+#define MODEL_NAME                          "b202"                   
+#define HW_REVISION                         "1.0"
+#define FW_REVISION                         "15.2.0"
+#define SW_REVISION                         "1.1"
 #define APP_ADV_INTERVAL                    300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
 #define APP_ADV_DURATION                    18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
@@ -653,6 +657,10 @@ static void services_init(void)
     memset(&dis_init, 0, sizeof(dis_init));
 
     ble_srv_ascii_to_utf8(&dis_init.manufact_name_str, (char *)MANUFACTURER_NAME);
+    ble_srv_ascii_to_utf8(&dis_init.model_num_str, (char *)MODEL_NAME);
+    ble_srv_ascii_to_utf8(&dis_init.hw_rev_str, (char *)HW_REVISION);
+    ble_srv_ascii_to_utf8(&dis_init.fw_rev_str, (char *)FW_REVISION);
+    ble_srv_ascii_to_utf8(&dis_init.sw_rev_str, (char *)SW_REVISION);
 
     dis_init.dis_char_rd_sec = SEC_OPEN;
 
