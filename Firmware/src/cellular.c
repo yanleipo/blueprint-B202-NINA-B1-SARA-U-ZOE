@@ -38,12 +38,16 @@ uint8_t imei[15];
 #define DEFAULT_APN "internet"
 #define MAX_APN_SIZE 32
 static uint8_t m_apn[MAX_APN_SIZE];
+#define MAX_SERVER_URL_SIZE 64
+static uint8_t m_server_url[MAX_SERVER_URL_SIZE];
 
 APP_TIMER_DEF(m_cel_timer_id);                                                               /**< cel timer. */
 #define CEL_INTERVAL                    APP_TIMER_TICKS(3000)        /**< SPI read interval (ticks). */
 #define CEL_COUNTER_MAX                 10/*3*/
-#define HTTP_SERVER   "ec2-18-224-182-187.us-east-2.compute.amazonaws.com"
-static uint8_t m_server_access_token[20];
+#define HTTP_SERVER   "b202-thingsboard.ddns.net"
+
+#define SERVER_ACCESS_TOKEN_SIZE 20
+static uint8_t m_server_access_token[SERVER_ACCESS_TOKEN_SIZE];
 
 static bool m_step_ready = false;
 static uint8_t m_cel_timer_count = 0;
@@ -102,7 +106,7 @@ void putstring(char* s)
     for (uint8_t i = 0; i < len; i++)
     {
         err_code = app_uart_put(s[i]);
-        APP_ERROR_CHECK(err_code);
+        if(err_code) B202_LOG_ERROR("app_uart_put. Err_code: 0x%x", err_code);
     }
 }
 
@@ -281,6 +285,8 @@ bool http_post(uint8_t* data)
     strcat(create_file_cmd, length_of_data_str);
     strcat(create_file_cmd, cmd_end);
 
+    NRF_LOG_HEXDUMP_DEBUG(create_file_cmd, length_cmd);
+
     //Send command
     char* cmd_char = (char*) create_file_cmd;
     putstring(create_file_cmd);
@@ -306,17 +312,20 @@ bool http_post(uint8_t* data)
         }
     }
 
+    /* Add 20ms delay between AT commands */
+    nrf_delay_ms(20);
+
     //HTTP post the file
     //status = send_command("AT+UHTTPC=0,4,\"/http_post\",\"result.txt\",\"jsondata.txt\",4\r\n");
     uint8_t* postcmd_start = "AT+UHTTPC=0,4,\"/api/v1/";
     uint8_t* postcmd_end = "/telemetry\",\"result.txt\",\"jsondata.txt\",4\r\n";
-    length_cmd = strlen(postcmd_start) + strlen(postcmd_end) + sizeof(m_server_access_token);
+    length_cmd = strlen(postcmd_start) + strlen(postcmd_end) + SERVER_ACCESS_TOKEN_SIZE;
     uint8_t* postcmd = (uint8_t*)malloc(length_cmd * sizeof(uint8_t*));
     memset(postcmd, 0, length_cmd * sizeof(uint8_t*));
 
     //Create complete AT command
     strcat(postcmd, postcmd_start);
-    strcat(postcmd, m_server_access_token);
+    strncat(postcmd, m_server_access_token, SERVER_ACCESS_TOKEN_SIZE);
     strcat(postcmd, postcmd_end);
 
     NRF_LOG_HEXDUMP_DEBUG(data, strlen(data));
@@ -341,6 +350,19 @@ bool cellular_set_apn(uint8_t* apn)
     memset(m_apn, 0, MAX_APN_SIZE);
     memcpy(m_apn, apn, strlen(apn));
     B202_LOG_INFO("APN set to: %s(%d)\n", m_apn, strlen(m_apn));
+    return true;
+}
+
+bool cellular_set_server_url(uint8_t* server_url)
+{
+    if(strlen(server_url) > MAX_SERVER_URL_SIZE)
+    {
+        B202_LOG_ERROR("Server name size(%d) is bigger than maximum size(%d)\n", strlen(server_url), MAX_SERVER_URL_SIZE);
+        return false;
+    }
+    memset(m_server_url, 0, MAX_SERVER_URL_SIZE);
+    memcpy(m_server_url, server_url, strlen(server_url));
+    B202_LOG_INFO("Server set to: %s(%d)\n", m_server_url, strlen(m_server_url));
     return true;
 }
 
@@ -399,6 +421,7 @@ void cellular_init(void* uart_event_handle)
 
     cellular_set_apn(DEFAULT_APN);
     memset(m_server_access_token, '0', sizeof(m_server_access_token));
+    cellular_set_server_url(HTTP_SERVER);
 
     const app_uart_comm_params_t comm_params =
       {
@@ -442,14 +465,12 @@ void cellular_step(void)
                 B202_LOG_INFO("cellular timer counter: %d", m_cel_timer_count);
                 if(m_cel_timer_count>=CEL_COUNTER_MAX)
                 {
-                    //Disable flow control
-                    status = send_command("AT&K0\r\n");
                     get_imei();
                     m_cel_status = CEL_READY_TO_REGISTER;
 
                     /* Server access token is 20bytes. It's set as IMEI of the CEL with 0 padding at the end */
                     memcpy(m_server_access_token, imei, sizeof(imei));
-                    B202_LOG_INFO("Server access token set to: %s.", m_server_access_token);
+                    B202_LOG_INFO("Server access token set to: %s(%d).", m_server_access_token, strlen(m_server_access_token));
                 }
                 break;
             case CEL_READY_TO_REGISTER:
@@ -457,18 +478,18 @@ void cellular_step(void)
                 if(status)
                 {
                     m_cel_status = CEL_REGISTERED;
-                    B202_LOG_DEBUG("Registered to  and activate ps_data\n", m_apn, sizeof(m_apn));
+                    B202_LOG_INFO("Registered to %s and activated ps_data\n", m_apn);
                 } else
                 {
                     B202_LOG_ERROR("Failed to config apn %s(%d) and activate ps_data\n", m_apn, sizeof(m_apn));
                 }
                 break;
             case CEL_REGISTERED:
-                status = set_http_server(HTTP_SERVER);
+                status = set_http_server(m_server_url);
                 if(status)
                 {
                     m_cel_status = CEL_CONNECTED;
-                    B202_LOG_DEBUG("Connected to server\n");
+                    B202_LOG_INFO("Connected to server %s\n", m_server_url);
                 } else
                 {
                     B202_LOG_ERROR("Failed to set_http_server\n");
@@ -481,17 +502,18 @@ void cellular_step(void)
                     int32_t log = 0;
                     ble_date_time_t utc_time;
                     int16_t temperature = 0;
+                    bool status = false;
 
                     temperature = sensor_read();
                     status = gnss_get_lns(&lat, &log, &utc_time);
                     if(status)
                     {
-                        B202_LOG_DEBUG("Tracker location: (%d, %d)\n", lat, log);
+                        //B202_LOG_DEBUG("Tracker location: (%d, %d)\n", lat, log);
                         fix = 1;
                     }
                     else
                     {
-                        B202_LOG_DEBUG("Unable to get location. Use default location\n");
+                        //B202_LOG_DEBUG("Unable to get location. Use default location\n");
                         fix = 0;
                         lat = DEFAULT_LAT;
                         log = DEFAULT_LONG;
@@ -500,7 +522,11 @@ void cellular_step(void)
                     uint8_t data[100];
                     memset(data, 0, sizeof(data));
                     sprintf(data, "{\"lat\":%d.%d,\"long\":%d.%d,\"fix\":%d,\"temperature\":%d}", lat/10000000, lat<0?-lat%10000000:lat%10000000, log/10000000, log<0?-log%10000000:log%10000000, fix, temperature);
-                    http_post(data);
+                    status = http_post(data);
+                    if(!status)
+                    {
+                        B202_LOG_ERROR("http_post failed");
+                    }
                  }   
                 break;
             default:

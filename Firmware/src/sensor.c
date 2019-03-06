@@ -105,7 +105,7 @@ void twi_init (void)
        .scl                = PIN_SENSOR_I2C_SCL,
        .sda                = PIN_SENSOR_I2C_SDA,
        .frequency          = NRF_DRV_TWI_FREQ_100K,
-       .interrupt_priority = APP_IRQ_PRIORITY_HIGH,
+       .interrupt_priority = APP_IRQ_PRIORITY_LOWEST,
        .clear_bus_init     = false
     };
 
@@ -135,7 +135,7 @@ int16_t sensor_read(void)
     i2c_read(&m_twi, SENSOR_ADDRESS, m_data_buffer, 2);
     m_temperature = (int16_t) ((uint16_t)m_data_buffer[0] | ((uint16_t)(m_data_buffer[1]) << 8));
 
-    NRF_LOG_INFO("Temperature is %d", m_temperature);
+    //NRF_LOG_INFO("Temperature is %d", m_temperature);
     return m_temperature;
 }
 

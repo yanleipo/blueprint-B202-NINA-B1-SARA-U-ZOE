@@ -13,6 +13,7 @@
 #include "App_scheduler.h"
 #include "app_timer.h"
 #include "gnss.h"
+#include "main.h"
 
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);  /**< SPI instance. */
@@ -221,7 +222,7 @@ void process_GNRMC_message(void)
         m_last_read_location_speed.longitude = 0;
    
     /* Debug */
-    NRF_LOG_RAW_INFO("%s\r\n",(uint32_t)m_gnss_buffer);
+    //NRF_LOG_RAW_INFO("%s\r\n",(uint32_t)m_gnss_buffer);
     //NRF_LOG_RAW_INFO("Time: %02d:%02d:%02d\r\n",m_last_read_location_speed.utc_time.hours,\
                      m_last_read_location_speed.utc_time.minutes,m_last_read_location_speed.utc_time.seconds);
     //NRF_LOG_RAW_INFO("Date: %02d-%02d-%02d\r\n",m_last_read_location_speed.utc_time.year, \
@@ -303,13 +304,15 @@ static void spi_init(void)
  */
  static void spi_timeout_handler(void * p_context)
 {    
+    ret_code_t err_code; 
     //NRF_LOG_INFO("spi_timeout_handler");
 
     //Reset rx buffer
     memset(m_rx_buf, 0, m_length);
 
     //Read SPI
-    APP_ERROR_CHECK(nrf_drv_spi_transfer(&spi, NULL, 0, m_rx_buf, m_length));
+    err_code = nrf_drv_spi_transfer(&spi, NULL, 0, m_rx_buf, m_length);
+    if(err_code) B202_LOG_ERROR("nrf_drv_spi_transfer failed. Err_code: 0x%x", err_code);
 }
 
 /**@brief Timer initialization.
@@ -353,12 +356,4 @@ bool gnss_get_lns(int32_t* lat_p, int32_t* log_p, ble_date_time_t* utc_time_p)
     *utc_time_p = m_last_read_location_speed.utc_time;
 
     return (true);
-
-        #if 0
-        err_code = ble_lns_loc_speed_send(&m_lns);
-        if (err_code != NRF_ERROR_INVALID_STATE)
-        {
-            APP_ERROR_CHECK(err_code);
-        }
-        #endif
 }

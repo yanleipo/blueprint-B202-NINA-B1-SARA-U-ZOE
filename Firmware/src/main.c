@@ -210,7 +210,7 @@ static void delete_bonds(void)
     NRF_LOG_INFO("Erase bonds!");
 
     err_code = pm_peers_delete();
-    APP_ERROR_CHECK(err_code);
+    if(err_code) B202_LOG_ERROR("pm_peers_delete failed: erro_code: 0x%x", err_code);
 }
 
 
@@ -228,7 +228,7 @@ void advertising_start(bool erase_bonds)
         ret_code_t err_code;
 
         err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
-        APP_ERROR_CHECK(err_code);
+        if(err_code) B202_LOG_ERROR("ble_advertising_start failed. Err_code: 0x%x", err_code);
     }
 }
 
@@ -308,7 +308,7 @@ static void loc_and_nav_timeout_handler(void * p_context)
         err_code = ble_lns_loc_speed_send(&m_lns);
         if (err_code != NRF_ERROR_INVALID_STATE)
         {
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("ble_lns_loc_speed_send failed. Err_code: 0x%x", err_code);
         }
     }
     
@@ -401,6 +401,27 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
             }
         }
 
+        if( p_evt->params.rx_data.length >= 8)
+        {
+            if( (p_evt->params.rx_data.p_data[0]=='s') &&\
+                (p_evt->params.rx_data.p_data[1]=='e') &&\
+                (p_evt->params.rx_data.p_data[2]=='r') &&\
+                (p_evt->params.rx_data.p_data[3]=='v') &&\
+                (p_evt->params.rx_data.p_data[4]=='e') &&\
+                (p_evt->params.rx_data.p_data[5]=='r') &&\
+                (p_evt->params.rx_data.p_data[6]=='='))
+            {
+                uint8_t server_length = p_evt->params.rx_data.length-7;
+                uint8_t* server = (uint8_t*)malloc(server_length * sizeof(uint8_t*));
+                memset(server, 0, server_length * sizeof(uint8_t*));
+                memcpy(server, &p_evt->params.rx_data.p_data[7], server_length);
+                B202_LOG_INFO("NUS: Server set to %s.", server);
+                cellular_set_server_url(server);
+                free(server);
+                dbg_command = true;
+            }
+        }
+
         if(!dbg_command)
         {
             for (uint32_t i = 0; i < p_evt->params.rx_data.length; i++)
@@ -411,7 +432,6 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
                     if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY))
                     {
                         NRF_LOG_ERROR("Failed receiving NUS message. Error 0x%x. ", err_code);
-                        APP_ERROR_CHECK(err_code);
                     }
                 } while (err_code == NRF_ERROR_BUSY);
             }
@@ -474,7 +494,7 @@ void uart_event_handle(app_uart_evt_t * p_event)
                                 (err_code != NRF_ERROR_RESOURCES) &&
                                 (err_code != NRF_ERROR_NOT_FOUND))
                             {
-                                APP_ERROR_CHECK(err_code);
+                                if(err_code) B202_LOG_ERROR("ble_nus_data_send failed. Err_code: 0x%x", err_code);
                             }
                         } while (err_code == NRF_ERROR_RESOURCES);
                     }
@@ -690,7 +710,7 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
     if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
     {
         err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
-        APP_ERROR_CHECK(err_code);
+        if(err_code) B202_LOG_ERROR("sd_ble_gap_disconnect failed. Err_code: 0x%x", err_code);
     }
 }
 
@@ -701,7 +721,7 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
  */
 static void conn_params_error_handler(uint32_t nrf_error)
 {
-    APP_ERROR_HANDLER(nrf_error);
+    B202_LOG_ERROR("conn_params_error_handler");
 }
 
 
@@ -737,15 +757,15 @@ static void sleep_mode_enter(void)
     ret_code_t err_code;
 
     err_code = bsp_indication_set(BSP_INDICATE_IDLE);
-    APP_ERROR_CHECK(err_code);
+    if(err_code) B202_LOG_ERROR("bsp_indication_set failed. Err_code: 0x%x", err_code);
 
     // Prepare wakeup buttons.
     err_code = bsp_btn_ble_sleep_mode_prepare();
-    APP_ERROR_CHECK(err_code);
+    if(err_code) B202_LOG_ERROR("bsp_btn_ble_sleep_mode_prepare failed. Err_code: 0x%x", err_code);
 
     // Go to system-off mode (this function will not return; wakeup will cause a reset).
     err_code = sd_power_system_off();
-    APP_ERROR_CHECK(err_code);
+    if(err_code) B202_LOG_ERROR("sd_power_system_off failed. Err_code: 0x%x", err_code);
 }
 
 
@@ -764,7 +784,7 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
         case BLE_ADV_EVT_FAST:
             NRF_LOG_INFO("Fast advertising.");
             err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("bsp_indication_set failed. Err_code: 0x%x", err_code);
             break;
 
         case BLE_ADV_EVT_IDLE:
@@ -791,10 +811,10 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
         case BLE_GAP_EVT_CONNECTED:
             NRF_LOG_INFO("Connected.");
             err_code = bsp_indication_set(BSP_INDICATE_CONNECTED);
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("bsp_indication_set failed. Err_code: 0x%x", err_code);
             m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
             err_code = nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("nrf_ble_qwr_conn_handle_assign failed. Err_code: 0x%x", err_code);
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
@@ -812,7 +832,7 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 .tx_phys = BLE_GAP_PHY_AUTO,
             };
             err_code = sd_ble_gap_phy_update(p_ble_evt->evt.gap_evt.conn_handle, &phys);
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("sd_ble_gap_phy_update failed. Err_code: 0x%x", err_code);
         } break;
 
         case BLE_GATTC_EVT_TIMEOUT:
@@ -820,7 +840,7 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             NRF_LOG_DEBUG("GATT Client Timeout.");
             err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gattc_evt.conn_handle,
                                              BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("sd_ble_gap_disconnect failed. Err_code: 0x%x", err_code);
             break;
 
         case BLE_GATTS_EVT_TIMEOUT:
@@ -828,7 +848,7 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             NRF_LOG_DEBUG("GATT Server Timeout.");
             err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gatts_evt.conn_handle,
                                              BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-            APP_ERROR_CHECK(err_code);
+            if(err_code) B202_LOG_ERROR("sd_ble_gap_disconnect failed. Err_code: 0x%x", err_code);
             break;
     
         case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
@@ -904,7 +924,7 @@ void bsp_event_handler(bsp_event_t event)
                                              BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
             if (err_code != NRF_ERROR_INVALID_STATE)
             {
-                APP_ERROR_CHECK(err_code);
+                if(err_code) B202_LOG_ERROR("sd_ble_gap_disconnect failed. Err_code: 0x%x", err_code);
             }
             break;
 
@@ -914,7 +934,7 @@ void bsp_event_handler(bsp_event_t event)
                 err_code = ble_advertising_restart_without_whitelist(&m_advertising);
                 if (err_code != NRF_ERROR_INVALID_STATE)
                 {
-                    APP_ERROR_CHECK(err_code);
+                    if(err_code) B202_LOG_ERROR("ble_advertising_restart_without_whitelist failed. Err_code: 0x%x", err_code);
                 }
             }
             break;
