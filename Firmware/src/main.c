@@ -71,7 +71,7 @@
 #define MODEL_NAME                          "b202"                   
 #define HW_REVISION                         "1.0"
 #define FW_REVISION                         "15.2.0"
-#define SW_REVISION                         "1.1"
+#define SW_REVISION                         "1.1.1"
 #define APP_ADV_INTERVAL                    300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
 #define APP_ADV_DURATION                    18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
@@ -743,6 +743,7 @@ static void sleep_mode_enter(void)
 {
     ret_code_t err_code;
 
+#if 0
     err_code = bsp_indication_set(BSP_INDICATE_IDLE);
     if(err_code) B202_LOG_ERROR("bsp_indication_set failed. Err_code: 0x%x", err_code);
 
@@ -753,6 +754,9 @@ static void sleep_mode_enter(void)
     // Go to system-off mode (this function will not return; wakeup will cause a reset).
     err_code = sd_power_system_off();
     if(err_code) B202_LOG_ERROR("sd_power_system_off failed. Err_code: 0x%x", err_code);
+#else
+    B202_LOG_WARNING("System entering sleep mode that is not handled ...");
+#endif
 }
 
 
@@ -775,7 +779,15 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
             break;
 
         case BLE_ADV_EVT_IDLE:
-            sleep_mode_enter();
+            /* Disable sleep function for demo purpose */
+            //sleep_mode_enter();
+
+            /* Keep advertising after advertising timeout, so that it's possible to connect from phone for diagnosis 
+             *
+             * In real product implementation, a bonding may have been in place. Advertising is not necessary for establishing
+             * connection for diagnosis.
+             */
+            advertising_start(false);
             break;
 
         default:
