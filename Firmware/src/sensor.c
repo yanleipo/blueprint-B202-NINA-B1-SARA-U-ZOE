@@ -10,6 +10,8 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
+#include "main.h"
+
 /* TWI instance ID. */
 #define TWI_INSTANCE_ID     1
 
@@ -48,7 +50,7 @@ uint32_t i2c_read(nrf_drv_twi_t const * p_instance, uint8_t address, uint8_t * p
 void sensor_reset()
 {
     NRF_LOG_INFO("bmi160_reset.");
-    m_req_buffer[0] = CTRL3_C_REG;
+    m_req_buffer[0] = CTRL3_C;
     i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer, 1, false);
     i2c_read(&m_twi, SENSOR_ADDRESS, m_data_buffer, 1);
 
@@ -63,6 +65,30 @@ uint8_t sensor_read_chip_id()
     i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer, 1, false);
     i2c_read(&m_twi, SENSOR_ADDRESS, m_data_buffer, 1);
     NRF_LOG_INFO("Sensor chip ID: 0x%x.", m_data_buffer[0]);
+    return m_data_buffer[0];
+}
+
+void sensor_set_mode()
+{
+    m_req_buffer[0] = CTRL9_XL;
+    m_req_buffer[1] = CTRL9_XL_VAL;
+    i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer,2, false);
+
+    m_req_buffer[0] = CTRL1_XL;
+    m_req_buffer[1] = CTRL1_XL_VAL;
+    i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer,2, false);
+
+    m_req_buffer[0] = CTRL10_C;
+    m_req_buffer[1] = CTRL10_C_VAL;
+    i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer,2, false);
+
+    m_req_buffer[0] = CTRL2_G;
+    m_req_buffer[1] = CTRL2_G_VAL;
+    i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer,2, false);
+
+    m_req_buffer[0] = INT1_CTRL;
+    m_req_buffer[1] = INT1_CTRL_VAL;
+    i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer,2, false);
 }
 
 /**
@@ -126,16 +152,21 @@ int sensor_init(void)
 
     sensor_reset();
     sensor_read_chip_id();
+    sensor_set_mode();
 }
 
 int16_t sensor_read(void)
 {
+    int16_t temp = 0;
     m_req_buffer[0] = TEMPERATURE_REG;
     i2c_write(&m_twi, SENSOR_ADDRESS, m_req_buffer, 1, false);
     i2c_read(&m_twi, SENSOR_ADDRESS, m_data_buffer, 2);
-    m_temperature = (int16_t) ((uint16_t)m_data_buffer[0] | ((uint16_t)(m_data_buffer[1]) << 8));
+    temp = (int16_t) ((uint16_t)m_data_buffer[0] | ((uint16_t)(m_data_buffer[1]) << 8));
 
-    //NRF_LOG_INFO("Temperature is %d", m_temperature);
+    /* data read from register jas a sensitivity of +16 LSB/degree C. 0 corresponds to 25 degree C */ 
+    m_temperature = (temp + 25 * 16) * 100 / 16;
+
+    B202_LOG_INFO("Temperature is %d", m_temperature);
     return m_temperature;
 }
 

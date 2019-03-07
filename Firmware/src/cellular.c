@@ -521,7 +521,7 @@ void cellular_step(void)
                 
                     uint8_t data[100];
                     memset(data, 0, sizeof(data));
-                    sprintf(data, "{\"lat\":%d.%d,\"long\":%d.%d,\"fix\":%d,\"temperature\":%d}", lat/10000000, lat<0?-lat%10000000:lat%10000000, log/10000000, log<0?-log%10000000:log%10000000, fix, temperature);
+                    sprintf(data, "{\"lat\":%d.%07d,\"long\":%d.%07d,\"fix\":%d,\"temperature\":%d.%02d}", lat/10000000, lat<0?-lat%10000000:lat%10000000, log/10000000, log<0?-log%10000000:log%10000000, fix, temperature/100, temperature<0?-temperature%100:temperature%100);
                     status = http_post(data);
                     if(!status)
                     {
