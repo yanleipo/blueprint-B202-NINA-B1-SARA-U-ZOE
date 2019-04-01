@@ -24,6 +24,11 @@
 #include "sensor.h"
 #include "main.h"
 
+#define USE_TCP_SOCKET 1
+#ifdef USE_TCP_SOCKET
+#define MAX_MESSAGE_LENGTH 256
+#endif
+
 extern bool m_dbg_UART_passthrough;                  /**< UART passthrough flag to overwrite LED status */
 
 #define UART_TX_BUF_SIZE 256                         /**< UART TX buffer size. */
@@ -226,6 +231,7 @@ bool config_apn_and_activate_ps_data(uint8_t* apn)
 
 bool set_http_server(uint8_t* server_name)
 {
+    #ifndef USE_TCP_SOCKET
     bool status;
 
     //Reset HTTP profile #0
@@ -256,11 +262,16 @@ bool set_http_server(uint8_t* server_name)
         return false;
 
     return true;
+    #else
+    B202_LOG_INFO("server_name: %s(%d).\n", server_name, strlen(server_name));
+    return true;
+    #endif
 }
 
 
 bool http_post(uint8_t* data)
 {
+    #ifndef USE_TCP_SOCKET
     bool status;
     uint8_t x;
     uint8_t in[UART_RX_BUF_SIZE];
@@ -336,8 +347,121 @@ bool http_post(uint8_t* data)
 
     if (!status)
         return false;
-    
+
     return true;
+    #else
+    bool status;
+    uint8_t x;
+    uint8_t in[UART_RX_BUF_SIZE];
+
+    /* Create TCP socket */
+    status = send_command("AT+USOCR=6\r\n");
+    if (!status)
+    {
+        B202_LOG_INFO("AT+USOCR=6 failed\n");
+        return false;
+    }
+    
+    /* Add 20ms delay between AT commands */
+    nrf_delay_ms(20);
+
+    /* Connect socket */
+    // Create complete AT command
+    uint8_t* connect_cmd_start = "AT+USOCO=0,\"";
+    uint8_t* connect_cmd_end = "\",8080\r\n";
+    uint8_t connect_cmd_len = strlen(connect_cmd_start) + strlen(m_server_url) + strlen(connect_cmd_end);
+    uint8_t* connect_cmd = (uint8_t*)malloc(connect_cmd_len * sizeof(uint8_t*));
+    memset(connect_cmd, 0, connect_cmd_len * sizeof(uint8_t*));
+    strcat(connect_cmd, connect_cmd_start);
+    strncat(connect_cmd, m_server_url, strlen(m_server_url));
+    strcat(connect_cmd, connect_cmd_end);
+    // issue command
+    status = send_command(connect_cmd);
+    free(connect_cmd);
+    if (!status)
+    {
+        B202_LOG_INFO("AT+USOCO failed\n");
+        return false;
+    }
+
+    /* Add 20ms delay between AT commands */
+    nrf_delay_ms(20);
+
+    /* Write data to socket */
+    // Construct post message
+    uint8_t* message = (uint8_t*)malloc(MAX_MESSAGE_LENGTH * sizeof(uint8_t*));
+    memset(message, 0, MAX_MESSAGE_LENGTH * sizeof(uint8_t*));
+    int pos = 0;
+    strcat(message+pos, "POST /api/v1/");
+    pos = strlen(message);
+    strncat(message+pos, m_server_access_token, SERVER_ACCESS_TOKEN_SIZE);
+    pos = strlen(message);
+    strcat(message+pos, "/telemetry HTTP/1.1\r\nHost:");
+    pos = strlen(message);
+    strncat(message+pos, m_server_url, strlen(m_server_url));
+    pos = strlen(message);
+    strcat(message+pos, ":8080\r\nContent-Type: application/json\r\nContent-Length: ");
+    pos = strlen(message);
+    sprintf(message+pos, "%d\r\n\r\n", strlen(data));
+    pos = strlen(message);
+    strcat(message+pos, data);
+    NRF_LOG_HEXDUMP_DEBUG(message, strlen(message));
+
+    // Create complete AT command
+    uint8_t* write_cmd_start = "AT+USOWR=0,";
+    uint8_t* write_cmd_end = "\r\n";
+    uint8_t length_of_data_str[12];
+    uint8_t length_of_data = strlen(message);
+    sprintf(length_of_data_str, "%d", length_of_data);
+
+    uint8_t write_cmd_len = strlen(write_cmd_start) + strlen(length_of_data_str) + strlen(write_cmd_end);
+    uint8_t* write_cmd = (uint8_t*)malloc(write_cmd_len * sizeof(uint8_t*));
+    memset(write_cmd, 0, write_cmd_len * sizeof(uint8_t*));
+    strcat(write_cmd, write_cmd_start);
+    strcat(write_cmd, length_of_data_str);
+    strcat(write_cmd, write_cmd_end);
+    NRF_LOG_HEXDUMP_DEBUG(write_cmd, write_cmd_len);
+
+    // issue command
+    putstring(write_cmd);
+    //Input data to file
+    do {
+        while (app_uart_get(&x) != NRF_SUCCESS);
+    } while (x != '@');
+    free(write_cmd);
+    
+    /* Add 50ms delay after receiving @ prompt according to CEL AT command manual */
+    nrf_delay_ms(100);
+
+    putstring(message);
+	free(message);
+    
+    while (true)
+    {
+        read_line(in);
+
+        if (strstr(in,"OK"))
+        {
+            break;
+        }
+        if (strstr(in,"ERROR"))
+        {
+            B202_LOG_ERROR("AT+USOWR failed\n");
+            return false;
+        }
+    }
+    B202_LOG_INFO("data posted successfully\n");
+
+    /* Close TCP socket */
+    status = send_command("AT+USOCL=0\r\n");
+    if (!status)
+    {
+        B202_LOG_ERROR("AT+USOCL=0 failed\n");
+        return false;
+    }
+
+    return true;
+    #endif
 }
 
 bool cellular_set_apn(uint8_t* apn)
