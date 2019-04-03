@@ -358,7 +358,7 @@ bool http_post(uint8_t* data)
     status = send_command("AT+USOCR=6\r\n");
     if (!status)
     {
-        B202_LOG_INFO("AT+USOCR=6 failed\n");
+        B202_LOG_ERROR("AT+USOCR=6 failed\n");
         return false;
     }
     
@@ -380,7 +380,8 @@ bool http_post(uint8_t* data)
     free(connect_cmd);
     if (!status)
     {
-        B202_LOG_INFO("AT+USOCO failed\n");
+        B202_LOG_ERROR("AT+USOCO failed\n");
+        send_command("AT+USOCL=0\r\n");
         return false;
     }
 
@@ -427,15 +428,15 @@ bool http_post(uint8_t* data)
     //Input data to file
     do {
         while (app_uart_get(&x) != NRF_SUCCESS);
-    } while (x != '@');
+    } while (x != '@' && m_step_ready==false);
     free(write_cmd);
     
     /* Add 50ms delay after receiving @ prompt according to CEL AT command manual */
     nrf_delay_ms(100);
 
     putstring(message);
-	free(message);
-    
+    free(message);
+
     while (true)
     {
         read_line(in);
@@ -447,10 +448,10 @@ bool http_post(uint8_t* data)
         if (strstr(in,"ERROR"))
         {
             B202_LOG_ERROR("AT+USOWR failed\n");
+            send_command("AT+USOCL=0\r\n");
             return false;
         }
     }
-    B202_LOG_INFO("data posted successfully\n");
 
     /* Close TCP socket */
     status = send_command("AT+USOCL=0\r\n");

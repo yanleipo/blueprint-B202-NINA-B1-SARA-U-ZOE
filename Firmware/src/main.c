@@ -71,7 +71,7 @@
 #define MODEL_NAME                          "b202"                   
 #define HW_REVISION                         "1.0"
 #define FW_REVISION                         "15.2.0"
-#define SW_REVISION                         "1.1.3"
+#define SW_REVISION                         "1.1.4"
 #define APP_ADV_INTERVAL                    300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
 #define APP_ADV_DURATION                    18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
