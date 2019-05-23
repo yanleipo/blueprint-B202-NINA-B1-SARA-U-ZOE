@@ -15,8 +15,15 @@
 /* TWI instance ID. */
 #define TWI_INSTANCE_ID     1
 
+#if defined(BOARD_PCA10040)
 #define PIN_SENSOR_I2C_SCL  3
 #define PIN_SENSOR_I2C_SDA  2
+#elif defined(BOARD_PCA10056)
+#define PIN_SENSOR_I2C_SCL  4
+#define PIN_SENSOR_I2C_SDA  30
+#else
+#error "I2C pins not defined"
+#endif
 
 /* Indicates if operation on TWI has ended. */
 static volatile bool m_xfer_done = false;

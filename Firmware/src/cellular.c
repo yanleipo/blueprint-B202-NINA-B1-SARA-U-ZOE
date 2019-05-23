@@ -629,7 +629,11 @@ void cellular_step(void)
                     int16_t temperature = 0;
                     bool status = false;
 
+                    #if !defined(SENSOR_NOT_PRESENT)
                     temperature = sensor_read();
+                    #else
+                    temperature = 2500;
+                    #endif
                     status = gnss_get_lns(&lat, &log, &utc_time);
                     if(status)
                     {

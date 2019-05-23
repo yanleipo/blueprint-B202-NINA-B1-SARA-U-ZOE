@@ -18,10 +18,19 @@
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);  /**< SPI instance. */
 
-#define SPI_SS_PIN    11
-#define SPI_MISO_PIN  12
-#define SPI_MOSI_PIN  13
-#define SPI_SCK_PIN   14
+#if defined(BOARD_PCA10040)
+#define SPI_SS_PIN    SPIS_CSN_PIN
+#define SPI_MISO_PIN  SPIS_MISO_PIN
+#define SPI_MOSI_PIN  SPIS_MOSI_PIN
+#define SPI_SCK_PIN   SPIS_SCK_PIN
+#elif defined(BOARD_PCA10056)
+#define SPI_SS_PIN    BSP_QSPI_CSN_PIN
+#define SPI_MISO_PIN  BSP_QSPI_IO0_PIN
+#define SPI_MOSI_PIN  BSP_QSPI_IO1_PIN
+#define SPI_SCK_PIN   BSP_QSPI_SCK_PIN
+#else
+#error "SPI pins not defined"
+#endif
 
 #define m_spi_rx_length 1
 #define m_gnss_buf_length 255

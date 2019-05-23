@@ -1151,7 +1151,10 @@ int main(void)
 
     cellular_init(uart_event_handle);
 
+    #if !defined(SENSOR_NOT_PRESENT)
     sensor_init();
+    #endif
+
     // Enter main loop.
     for (;;)
     {
