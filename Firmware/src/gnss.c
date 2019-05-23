@@ -18,7 +18,7 @@
 #define SPI_INSTANCE  0 /**< SPI instance index. */
 static const nrf_drv_spi_t spi = NRF_DRV_SPI_INSTANCE(SPI_INSTANCE);  /**< SPI instance. */
 
-#if defined(BOARD_PCA10040)
+#if defined(BOARD_CUSTOM)
 #define SPI_SS_PIN    SPIS_CSN_PIN
 #define SPI_MISO_PIN  SPIS_MISO_PIN
 #define SPI_MOSI_PIN  SPIS_MOSI_PIN

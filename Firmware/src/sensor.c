@@ -15,7 +15,7 @@
 /* TWI instance ID. */
 #define TWI_INSTANCE_ID     1
 
-#if defined(BOARD_PCA10040)
+#if defined(BOARD_CUSTOM)
 #define PIN_SENSOR_I2C_SCL  3
 #define PIN_SENSOR_I2C_SDA  2
 #elif defined(BOARD_PCA10056)
