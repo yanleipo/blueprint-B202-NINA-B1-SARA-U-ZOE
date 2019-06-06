@@ -71,7 +71,7 @@
 #define MODEL_NAME                          "b202"                   
 #define HW_REVISION                         "1.0"
 #define FW_REVISION                         "15.2.0"
-#define SW_REVISION                         "1.1.5"
+#define SW_REVISION                         "1.1.6"
 #define APP_ADV_INTERVAL                    300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 
 #define APP_ADV_DURATION                    18000                                   /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
@@ -482,6 +482,21 @@ void uart_event_handle(app_uart_evt_t * p_event)
                         } while (err_code == NRF_ERROR_RESOURCES);
                     }
 
+                    index = 0;
+                }
+            }
+            else
+            {
+                UNUSED_VARIABLE(app_uart_get(&data_array[index]));
+                index++;
+
+                if ((data_array[index - 1] == '\n') ||
+                    (data_array[index - 1] == '@') )
+                {
+                    if (index > 1 || (index==1 && data_array[0]=='@'))
+                    {
+                        process_UART_response(data_array, index);
+                    }
                     index = 0;
                 }
             }

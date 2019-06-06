@@ -9,4 +9,6 @@ void cellular_init(void* uart_event_handle);
 
 void cellular_step(void);
 
+void process_UART_response(uint8_t* buf, uint8_t len);
+
 #endif

@@ -40,6 +40,35 @@ static uint8_t     m_tx_buf[UART_TX_BUF_SIZE];
 
 uint8_t imei[15];
 
+#define USE_CELLLOCATE 1
+
+#ifdef USE_CELLLOCATE
+typedef enum
+{
+    CONSUMED = 0,
+    AT_OK,
+    AT_ERROR
+} at_response_t;
+
+
+typedef struct celllocate_loc_s
+{
+    int32_t                         latitude;                                  /**< Latitude (10e-7 degrees). */
+    int32_t                         longitude;                                 /**< Longitude (10e-7 degrees). */
+} celllocate_loc_t;
+
+at_response_t m_at_response = CONSUMED;
+bool m_celllocate_loc_valid = false;
+bool m_celllocate_loc_command_completed = true;
+celllocate_loc_t m_celllocate_loc;
+static uint8_t m_previous_command[UART_RX_BUF_SIZE];
+bool m_ready_to_input = false;
+bool m_imei_valid = false;
+#define CELLLOCATE_COMMAND_INTERVAL 5
+static uint8_t m_celllocate_count = 0;
+
+#endif
+
 #define DEFAULT_APN "internet"
 #define MAX_APN_SIZE 32
 static uint8_t m_apn[MAX_APN_SIZE];
@@ -108,6 +137,7 @@ void putstring(char* s)
     uint32_t err_code;
     
     uint8_t len = strlen((char *) s);
+
     for (uint8_t i = 0; i < len; i++)
     {
         err_code = app_uart_put(s[i]);
@@ -115,6 +145,134 @@ void putstring(char* s)
     }
 }
 
+#ifdef USE_CELLLOCATE
+static void set_AT_response(at_response_t at_response)
+{
+    if( m_at_response != CONSUMED)
+    {
+        B202_LOG_ERROR("Previous AT command response not consumed yet");
+    }
+
+    m_at_response = at_response;
+}
+
+static bool get_AT_response(at_response_t* res)
+{
+    if(res == NULL)
+        return false;
+
+    *res = m_at_response;
+
+    m_at_response = CONSUMED;
+
+    return true;
+}
+static int string_to_int(uint8_t* buf)
+{
+    uint8_t* ptr_p = buf;
+    int32_t result = 0;
+    int32_t sign = 1;
+
+    if(*ptr_p == '-')
+        sign = -1;
+    
+    while( *ptr_p != NULL)
+    {
+        if(*ptr_p >= '0' && *ptr_p <= '9' )
+        {
+            result = result*10 + (*ptr_p - '0');
+        }
+        ptr_p++;
+    }
+    result = result * sign;
+
+    B202_LOG_INFO("token: %s result: %d", buf, result);
+
+    return result;
+}
+
+static void set_celllocate_loc(uint8_t* buf, uint8_t len)
+{
+    uint8_t *tok;
+    uint8_t s[2]=",";
+    uint8_t count = 0;
+    int32_t latitude = DEFAULT_LAT;
+    int32_t longitude = DEFAULT_LONG;
+
+    tok = strtok(buf,s);
+    while(tok != NULL)
+    {
+        B202_LOG_INFO("count: %d, tok: %s", count, tok);
+        if(count==2)
+        {
+            latitude = string_to_int(tok);
+        }
+        if(count==3)
+        {
+            longitude = string_to_int(tok);
+            break;
+        }
+        tok = strtok(NULL, s);
+        count += 1;
+    }
+
+    m_celllocate_loc.latitude = latitude;
+    m_celllocate_loc.longitude = longitude;
+
+    m_celllocate_loc_valid = true;
+    m_celllocate_loc_command_completed = true;
+}
+
+static bool get_celllocate_loc(int32_t* lat_p, int32_t* log_p)
+{
+    if (m_celllocate_loc_valid == false)
+        return (false);
+    
+    *lat_p = m_celllocate_loc.latitude;
+    *log_p = m_celllocate_loc.longitude;
+    return (true);
+}
+
+void process_UART_response(uint8_t* buf, uint8_t len)
+{
+    //B202_LOG_INFO("--- UART response(%d)", len);
+    //NRF_LOG_HEXDUMP_DEBUG(buf, len);
+
+    if(strncmp(buf, "OK", 2)==0)
+    {
+        set_AT_response(AT_OK);
+    } else if(strncmp(buf, "ERROR", 5)==0)
+    {
+        set_AT_response(AT_ERROR);
+    } else if(strstr(buf, "+UULOC:"))
+    {
+        set_celllocate_loc(buf, len);
+    } else if(buf[0] == '@')
+    {
+        m_ready_to_input = true;
+    } else if(buf[0] == 'A' && buf[1] == 'T')
+    {
+        memset(m_previous_command, 0, UART_RX_BUF_SIZE);
+        memcpy(m_previous_command, buf, len);
+    } else
+    {
+        //B202_LOG_INFO("Unhandled UART response");
+        if(strncmp(m_previous_command, "AT+GSN", 6)==0)
+        {
+            for (uint8_t i=0; i < 15;i++)
+            {
+                imei[i] = (uint8_t)buf[i];
+            }
+            m_imei_valid = true;
+            B202_LOG_INFO("IMEI: %s", imei);
+        }
+    }
+}
+#else
+void process_UART_response(uint8_t* buf, uint8_t len)
+{
+}
+#endif
 
 uint8_t read_line(char* buf)
 {
@@ -133,6 +291,23 @@ uint8_t read_line(char* buf)
 
 bool send_command(char* command)
 {
+    #ifdef USE_CELLLOCATE
+    at_response_t at_response = CONSUMED;
+    putstring(command);
+
+    while(at_response == CONSUMED)
+    {
+        get_AT_response(&at_response);
+        __WFE();
+    }
+    if(at_response == AT_OK)
+    {
+        return true;
+    } else
+    {
+        return false;
+    }    
+	#else
     uint8_t in[UART_RX_BUF_SIZE];
 
     putstring(command);
@@ -150,6 +325,7 @@ bool send_command(char* command)
             return false;
         }
     }
+	#endif
 }
 
 
@@ -159,6 +335,12 @@ bool get_imei()
 
     putstring("AT+GSN\r\n");
 
+    #ifdef USE_CELLLOCATE
+    while(m_imei_valid == false)
+    {
+        __WFE();
+    }
+	#else
     while (true)
     {
         read_line(in);
@@ -176,6 +358,7 @@ bool get_imei()
     }
 
     B202_LOG_INFO("IMEI: %s", imei);
+    #endif
     return true;
 }
 
@@ -224,6 +407,15 @@ bool config_apn_and_activate_ps_data(uint8_t* apn)
     status = send_command("AT+UPSDA=0,3\r\n");
     if (!status)
         return false;
+
+    #ifdef USE_CELLLOCATE
+    status = send_command("AT+UGSRV=\"cell-live1.services.u-blox.com\",\"cell-live2.services.u-blox.com\",\"a20IqSlJE0uVrv-ciiFnmw\",14,4,1,65,0,15\r\n");
+    if (!status)
+        return false;
+    status = send_command("AT+ULOCCELL=0\r\n");
+    if (!status)
+        return false;
+    #endif
 
     return true;
 }
@@ -351,8 +543,7 @@ bool http_post(uint8_t* data)
     return true;
     #else
     bool status;
-    uint8_t x;
-    uint8_t in[UART_RX_BUF_SIZE];
+	at_response_t at_response = CONSUMED;
 
     /* Create TCP socket */
     status = send_command("AT+USOCR=6\r\n");
@@ -406,7 +597,6 @@ bool http_post(uint8_t* data)
     sprintf(message+pos, "%d\r\n\r\n", strlen(data));
     pos = strlen(message);
     strcat(message+pos, data);
-    NRF_LOG_HEXDUMP_DEBUG(message, strlen(message));
 
     // Create complete AT command
     uint8_t* write_cmd_start = "AT+USOWR=0,";
@@ -421,22 +611,45 @@ bool http_post(uint8_t* data)
     strcat(write_cmd, write_cmd_start);
     strcat(write_cmd, length_of_data_str);
     strcat(write_cmd, write_cmd_end);
-    NRF_LOG_HEXDUMP_DEBUG(write_cmd, write_cmd_len);
 
     // issue command
     putstring(write_cmd);
     //Input data to file
+    #ifdef USE_CELLLOCATE
+    while(m_ready_to_input != true)
+    {
+        __WFE();
+    }
+    m_ready_to_input = false;
+    free(write_cmd);
+    #else
     do {
         while (app_uart_get(&x) != NRF_SUCCESS);
     } while (x != '@' && m_step_ready==false);
     free(write_cmd);
+    #endif
     
     /* Add 50ms delay after receiving @ prompt according to CEL AT command manual */
     nrf_delay_ms(100);
 
     putstring(message);
+    //B202_LOG_INFO("post data (%d):\n", strlen(data));
+    //NRF_LOG_HEXDUMP_DEBUG(data, strlen(data));
     free(message);
 
+    #ifdef USE_CELLLOCATE
+    while(at_response == CONSUMED)
+    {
+        get_AT_response(&at_response);
+        __WFE();
+    }
+    if(at_response == AT_ERROR)
+    {
+        B202_LOG_ERROR("AT+USOWR failed\n");
+        send_command("AT+USOCL=0\r\n");
+        return false;
+    }
+    #else
     while (true)
     {
         read_line(in);
@@ -452,6 +665,7 @@ bool http_post(uint8_t* data)
             return false;
         }
     }
+    #endif
 
     /* Close TCP socket */
     status = send_command("AT+USOCL=0\r\n");
@@ -629,6 +843,17 @@ void cellular_step(void)
                     int16_t temperature = 0;
                     bool status = false;
 
+                    #ifdef USE_CELLLOCATE
+                    if(m_celllocate_count == 0 && m_celllocate_loc_command_completed == true)
+                    {
+                        B202_LOG_INFO("++++ AT+ULOC=2,2,1,180,500");
+                        send_command("AT+ULOC=2,2,1,180,500\r\n");
+                        m_celllocate_loc_command_completed = false;
+                    }
+                    m_celllocate_count+=1;
+                    if(m_celllocate_count>=CELLLOCATE_COMMAND_INTERVAL) m_celllocate_count = 0;
+                    #endif
+
                     #if !defined(SENSOR_NOT_PRESENT)
                     temperature = sensor_read();
                     #else
@@ -643,9 +868,21 @@ void cellular_step(void)
                     else
                     {
                         //B202_LOG_DEBUG("Unable to get location. Use default location\n");
+                        #ifdef USE_CELLLOCATE
+                        if(get_celllocate_loc(&lat, &log))
+                        {
+                            fix = 1;
+                        } else
+                        {
+                            fix = 0;
+                            lat = DEFAULT_LAT;
+                            log = DEFAULT_LONG;
+                        }
+                        #else
                         fix = 0;
                         lat = DEFAULT_LAT;
                         log = DEFAULT_LONG;
+                        #endif
                     }
                 
                     uint8_t data[100];
